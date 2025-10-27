@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: image-merge-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PASSWORD
+        value: "sora0419"
+        scope: secret
+      - key: SECRET_KEY
+        value: "change_this_to_a_random_string"
+        scope: secret
