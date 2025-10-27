@@ -1,0 +1,123 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>画像二重合成ツール</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    .box { border:1px solid #ddd; padding:16px; border-radius:8px; margin-bottom:20px; }
+    input[type=file] { display:block; margin:10px 0; }
+    img { max-width:90%; display:block; margin:10px auto; border:1px solid #eee; }
+    label { display:inline-block; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h1>画像A × 画像B → 画像C（パスワード保護）</h1>
+
+  <div id="loginBox" class="box">
+    <h3>アクセス認証</h3>
+    <input id="pw" type="password" placeholder="パスワードを入力" />
+    <button id="btnAuth">送信</button>
+    <p id="authMsg" style="color:red; display:none;"></p>
+  </div>
+
+  <div id="toolBox" class="box" style="display:none;">
+    <h3>生成ツール</h3>
+    <form id="form">
+      <label>画像A（低画質で見せたい画像）</label>
+      <input type="file" name="imageA" accept="image/*" required />
+
+      <label>画像B（高画質で見せたい画像）</label>
+      <input type="file" name="imageB" accept="image/*" required />
+
+      <label>低周波寄りの重み (alpha_low) — 0.0〜1.0</label>
+      <input type="number" step="0.05" min="0" max="1" id="alpha_low" value="0.7">
+
+      <label>高周波寄りの重み (alpha_high) — 0.0〜1.0</label>
+      <input type="number" step="0.05" min="0" max="1" id="alpha_high" value="0.3">
+
+      <br><br>
+      <button type="submit">生成</button>
+    </form>
+
+    <h4>結果プレビュー</h4>
+    <img id="result" alt="result" />
+    <a id="downloadLink" style="display:block; margin-top:10px;">出力画像を保存</a>
+  </div>
+
+<script>
+const BACKEND_URL = "https://YOUR_BACKEND_URL"; // ← ここをあなたのバックエンドURLに置き換えてください
+
+document.getElementById("btnAuth").addEventListener("click", async () => {
+  const pw = document.getElementById("pw").value;
+  const authMsg = document.getElementById("authMsg");
+  authMsg.style.display = "none";
+  try {
+    const res = await fetch(BACKEND_URL + "/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw })
+    });
+    const j = await res.json();
+    if (j.ok && j.token) {
+      localStorage.setItem("merge_token", j.token);
+      document.getElementById("loginBox").style.display = "none";
+      document.getElementById("toolBox").style.display = "block";
+    } else {
+      authMsg.textContent = j.error || "認証に失敗しました";
+      authMsg.style.display = "block";
+    }
+  } catch (err) {
+    authMsg.textContent = "通信エラー";
+    authMsg.style.display = "block";
+  }
+});
+
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const token = localStorage.getItem("merge_token");
+  if (!token) { alert("認証が必要です"); return; }
+
+  const form = e.target;
+  const fd = new FormData();
+  fd.append("imageA", form.imageA.files[0]);
+  fd.append("imageB", form.imageB.files[0]);
+  fd.append("alpha_low", document.getElementById("alpha_low").value);
+  fd.append("alpha_high", document.getElementById("alpha_high").value);
+
+  const btn = form.querySelector("button[type=submit]");
+  btn.disabled = true;
+  btn.textContent = "生成中...";
+
+  try {
+    const res = await fetch(BACKEND_URL + "/merge", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token },
+      body: fd
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(()=>null);
+      alert("エラー: " + (j && j.error ? j.error : res.statusText));
+      btn.disabled = false;
+      btn.textContent = "生成";
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    document.getElementById("result").src = url;
+    const dl = document.getElementById("downloadLink");
+    dl.href = url;
+    dl.download = "C.jpg";
+    dl.textContent = "出力画像を右クリック→保存  または ここをクリックしてダウンロード";
+  } catch (err) {
+    alert("通信エラー");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "生成";
+  }
+});
+</script>
+</body>
+</html>
